@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Item {
+  id            String
+  gameMode      String
+  name          String
+  shortName     String
+  wikiUrl       String?
+  imageUrl      String?
+  imageLocal    String?
+  itemClasses   String  @default("[]")
+  basePrice     Int     @default(0)
+  trader        String
+  loyaltyLevel  Int
+  poolKey       String
+  rarity        String
+  needsRefresh  Boolean @default(false)
+  collection    CollectionEntry?
+
+  @@id([id, gameMode])
+  @@index([poolKey, gameMode])
+}
+
+model Pool {
+  poolKey     String
+  gameMode    String
+  trader      String
+  levelRange  String
+  itemCount   Int
+  packPrice   Int
+  rarityCuts  String
+  @@id([poolKey, gameMode])
+  @@index([gameMode])
+}
+
+model CollectionEntry {
+  itemId          String
+  gameMode        String
+  ownedCount      Int      @default(0)
+  foilCount       Int      @default(0)
+  firstObtainedAt DateTime @default(now())
+  item            Item     @relation(fields: [itemId, gameMode], references: [id, gameMode], onDelete: Cascade)
+
+  @@id([itemId, gameMode])
+}
+
+model LedgerEntry {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  type        String
+  gameMode    String
+  coinDelta   Int      @default(0)
+  scrapDelta  Int      @default(0)
+  xpAmount    Int?
+  refId       String?
+  reversesId  String?  @unique
+  note        String?
+  @@index([gameMode, timestamp])
+}
+
+model PackOpen {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  gameMode       String
+  poolKey        String
+  cost           Int
+  cards          String
+  wasGodPack     Boolean  @default(false)
+  pityBefore     String
+  timestamp      DateTime @default(now())
+  flipped        Boolean  @default(false)
+  flippedCards   String   @default("[]")
+  @@index([gameMode, timestamp])
+}
+
+model PityState {
+  poolKey       String
+  gameMode      String
+  packsSinceNew Int @default(0)
+  packsSinceEpic Int @default(0)
+  @@id([poolKey, gameMode])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
