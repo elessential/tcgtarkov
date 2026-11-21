@@ -16,15 +16,24 @@ import {
   type PoolItem,
   type Rarity,
 } from "../shared/game.js";
+import {
+  COLLECTIBLE_CARDS,
+  COLLECTIBLE_PACK_PRICE,
+  COLLECTIBLE_PACK_SIZE,
+  collectibleCardById,
+  drawCollectiblePack,
+  type DrawnCollectible,
+} from "../shared/collectibles.js";
 import { reverseLedgerEntry } from "../shared/ledger.js";
 import { prisma } from "./db.js";
 import { addEventClient, closeEventClients, publishEvent, publishHeartbeat } from "./events.js";
 import { cacheImage, findFandomThumbnail } from "./imageCache.js";
+import { resolveCollectibleArtwork } from "./collectibleArtwork.js";
 import { seedGameMode } from "./seedData.js";
 import { getSettings, persistSettings } from "./settings.js";
 import { poolConfig } from "./pool-config.js";
 import { isItemClassEnabled } from "./itemClassFilter.js";
-import { backupSchema, craftSchema, flipPackSchema, idParamSchema, itemsQuerySchema, openPackSchema, settingsSchema, xpEntrySchema } from "./validation.js";
+import { backupSchema, craftSchema, flipPackSchema, idParamSchema, itemsQuerySchema, openCollectiblePackSchema, openPackSchema, settingsSchema, xpEntrySchema } from "./validation.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -217,6 +226,44 @@ app.get("/api/items", async (request, response) => {
   })));
 });
 
+app.get("/api/collectibles", async (_request, response) => {
+  const settings = await getSettings(prisma);
+  const [ownership, recentPacks] = await Promise.all([
+    prisma.collectibleCollectionEntry.findMany({
+      where: { gameMode: settings.gameMode },
+      orderBy: { firstObtainedAt: "asc" },
+    }),
+    prisma.collectiblePackOpen.findMany({
+      where: { gameMode: settings.gameMode },
+      orderBy: [{ timestamp: "desc" }, { id: "desc" }],
+      take: 20,
+    }),
+  ]);
+  const ownedById = new Map(ownership.map((entry) => [entry.cardId, entry]));
+  const artwork = await resolveCollectibleArtwork();
+  const withArtwork = (cardId: string) => artwork.byCardId.get(cardId) ?? { imageLocal: null, imageUrl: null };
+  response.json({
+    cards: COLLECTIBLE_CARDS.map((card) => {
+      const entry = ownedById.get(card.id);
+      return { ...card, ...withArtwork(card.id), ownedCount: entry?.ownedCount ?? 0, foilCount: entry?.foilCount ?? 0 };
+    }),
+    packs: recentPacks.map((pack) => ({
+      ...pack,
+      cards: (JSON.parse(pack.cards) as DrawnCollectible[]).map((card) => ({
+        ...collectibleCardById(card.id),
+        ...withArtwork(card.id),
+        isNew: card.isNew,
+        isFoil: card.isFoil,
+      })),
+    })),
+    artworkWarning: artwork.warning,
+    packPrice: COLLECTIBLE_PACK_PRICE,
+    packSize: COLLECTIBLE_PACK_SIZE,
+    collectedCount: ownership.filter((entry) => entry.ownedCount > 0).length,
+    totalCount: COLLECTIBLE_CARDS.length,
+  });
+});
+
 app.post("/api/xp", async (request, response) => {
   const { xpAmount } = parseOrThrow(xpEntrySchema, request.body);
   const settings = await getSettings(prisma);
@@ -228,6 +275,123 @@ app.post("/api/xp", async (request, response) => {
   const hud = await getHud(settings.gameMode);
   publishEvent("hud_update", hud);
   response.status(201).json({ ...hud, earned: coinDelta });
+});
+
+app.post("/api/collectibles/open", async (request, response) => {
+  const { idempotencyKey } = parseOrThrow(openCollectiblePackSchema, request.body);
+  const settings = await getSettings(prisma);
+  const gameMode = settings.gameMode;
+  let result: {
+    pack: Awaited<ReturnType<typeof prisma.collectiblePackOpen.create>>;
+    cards: DrawnCollectible[];
+    repeated: boolean;
+  };
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const previous = await tx.collectiblePackOpen.findUnique({ where: { idempotencyKey } });
+      if (previous) {
+        return { pack: previous, cards: JSON.parse(previous.cards) as DrawnCollectible[], repeated: true };
+      }
+
+      const [balance, ownedEntries] = await Promise.all([
+        getBalances(gameMode, tx),
+        tx.collectibleCollectionEntry.findMany({
+          where: { gameMode, ownedCount: { gt: 0 } },
+          select: { cardId: true },
+        }),
+      ]);
+      if (balance.coins < COLLECTIBLE_PACK_PRICE) {
+        throw Object.assign(new Error(`Not enough coins. A Collectibles pack costs ${COLLECTIBLE_PACK_PRICE}.`), { status: 400 });
+      }
+
+      const cards = drawCollectiblePack(new Set(ownedEntries.map((entry) => entry.cardId)), () => randomInt(0, 1_000_000) / 1_000_000);
+      const pack = await tx.collectiblePackOpen.create({
+        data: {
+          idempotencyKey,
+          gameMode,
+          cost: COLLECTIBLE_PACK_PRICE,
+          cards: JSON.stringify(cards),
+        },
+      });
+      await tx.ledgerEntry.create({
+        data: {
+          type: "collectible_pack_purchase",
+          gameMode,
+          coinDelta: -COLLECTIBLE_PACK_PRICE,
+          refId: pack.id,
+          note: "Opened a Collectibles pack",
+        },
+      });
+      for (const card of cards) {
+        await tx.collectibleCollectionEntry.upsert({
+          where: { cardId_gameMode: { cardId: card.id, gameMode } },
+          create: {
+            cardId: card.id,
+            gameMode,
+            ownedCount: 1,
+            foilCount: card.isFoil ? 1 : 0,
+          },
+          update: {
+            ownedCount: { increment: 1 },
+            foilCount: { increment: card.isFoil ? 1 : 0 },
+          },
+        });
+      }
+      return { pack, cards, repeated: false };
+    });
+  } catch (error) {
+    const previous = await prisma.collectiblePackOpen.findUnique({ where: { idempotencyKey } });
+    if (!previous) throw error;
+    result = { pack: previous, cards: JSON.parse(previous.cards) as DrawnCollectible[], repeated: true };
+  }
+
+  if (!result.repeated) publishEvent("hud_update", await getHud(gameMode));
+  const artwork = await resolveCollectibleArtwork();
+  const cards = result.cards.map((card) => ({
+    ...collectibleCardById(card.id),
+    ...(artwork.byCardId.get(card.id) ?? { imageLocal: null, imageUrl: null }),
+    isNew: card.isNew,
+    isFoil: card.isFoil,
+  }));
+  if (!result.repeated) {
+    publishEvent("pack_opened", {
+      poolKey: "collectibles",
+      cards,
+      godPack: false,
+      packId: `collectible-${result.pack.id}`,
+      overlayMode: settings.overlayMode,
+      duration: settings.overlayDuration,
+      isCollectible: true,
+    });
+  }
+  response.status(result.repeated ? 200 : 201).json({
+    ...result,
+    pack: {
+      ...result.pack,
+      cards,
+    },
+  });
+});
+
+app.post("/api/collectibles/:id/flip", async (request, response) => {
+  const { id } = parseOrThrow(idParamSchema, request.params);
+  const body = parseOrThrow(flipPackSchema, request.body);
+  const settings = await getSettings(prisma);
+  const pack = await prisma.collectiblePackOpen.findFirst({
+    where: { id, gameMode: settings.gameMode },
+  });
+  if (!pack) throw Object.assign(new Error("Collectibles pack not found."), { status: 404 });
+  const cards = JSON.parse(pack.cards) as DrawnCollectible[];
+  const indexes = "index" in body
+    ? [body.index]
+    : cards.map((_, index) => index);
+  if (indexes.some((index) => index >= cards.length)) {
+    throw Object.assign(new Error("Card index is outside this Collectibles pack."), { status: 400 });
+  }
+  for (const cardIndex of indexes) {
+    publishEvent("card_flipped", { packId: `collectible-${pack.id}`, cardIndex });
+  }
+  response.json({ ok: true, flippedCards: indexes });
 });
 
 app.post("/api/packs/open", async (request, response) => {
@@ -433,7 +597,7 @@ app.post("/api/ledger/:id/undo", async (request, response) => {
   const gameMode = settings.gameMode;
   await prisma.$transaction(async (tx) => {
     const entry = await tx.ledgerEntry.findFirst({ where: { id, gameMode } });
-    if (!entry || entry.reversesId || !["xp_entry", "pack_purchase"].includes(entry.type)) {
+    if (!entry || entry.reversesId || !["xp_entry", "pack_purchase", "collectible_pack_purchase"].includes(entry.type)) {
       throw Object.assign(new Error("This transaction cannot be undone."), { status: 400 });
     }
     const alreadyReversed = await tx.ledgerEntry.findUnique({ where: { reversesId: entry.id } });
@@ -486,6 +650,51 @@ app.post("/api/ledger/:id/undo", async (request, response) => {
           data: reverseLedgerEntry(gain, "Undo duplicate scrap from pack"),
         });
       }
+    } else if (entry.type === "collectible_pack_purchase") {
+      const purchases = await tx.ledgerEntry.findMany({
+        where: { gameMode, type: "collectible_pack_purchase" },
+        orderBy: [{ timestamp: "desc" }, { id: "desc" }],
+      });
+      let latestUnreversed: (typeof purchases)[number] | undefined;
+      for (const purchase of purchases) {
+        if (!(await tx.ledgerEntry.findUnique({ where: { reversesId: purchase.id } }))) {
+          latestUnreversed = purchase;
+          break;
+        }
+      }
+      if (latestUnreversed?.id !== entry.id) {
+        throw Object.assign(new Error("Only the most recent Collectibles pack purchase can be undone."), { status: 400 });
+      }
+      const pack = entry.refId ? await tx.collectiblePackOpen.findUnique({ where: { id: entry.refId } }) : null;
+      if (!pack) throw Object.assign(new Error("Collectibles pack history is missing; the purchase cannot be undone."), { status: 409 });
+      const cards = JSON.parse(pack.cards) as DrawnCollectible[];
+      const counts = new Map<string, { owned: number; foil: number }>();
+      for (const card of cards) {
+        const count = counts.get(card.id) ?? { owned: 0, foil: 0 };
+        count.owned += 1;
+        count.foil += card.isFoil ? 1 : 0;
+        counts.set(card.id, count);
+      }
+      for (const [cardId, count] of counts) {
+        const current = await tx.collectibleCollectionEntry.findUnique({
+          where: { cardId_gameMode: { cardId, gameMode } },
+        });
+        if (!current || current.ownedCount < count.owned || current.foilCount < count.foil) {
+          throw Object.assign(new Error("Collectibles collection changed since this pack was opened; undo is no longer safe."), { status: 409 });
+        }
+        const ownedCount = current.ownedCount - count.owned;
+        if (ownedCount === 0) {
+          await tx.collectibleCollectionEntry.delete({ where: { cardId_gameMode: { cardId, gameMode } } });
+        } else {
+          await tx.collectibleCollectionEntry.update({
+            where: { cardId_gameMode: { cardId, gameMode } },
+            data: { ownedCount, foilCount: current.foilCount - count.foil },
+          });
+        }
+      }
+      await tx.ledgerEntry.create({
+        data: reverseLedgerEntry(entry, `Undo: ${entry.note ?? "Collectibles pack purchase"}`),
+      });
     } else {
       await tx.ledgerEntry.create({
         data: reverseLedgerEntry(entry, `Undo: ${entry.note ?? entry.type}`),
@@ -645,14 +854,53 @@ app.get("/api/export", async (_request, response) => {
     prisma.packOpen.findMany({ where: { gameMode }, orderBy: { timestamp: "asc" } }),
     prisma.pityState.findMany({ where: { gameMode } }),
   ]);
-  response.json({ version: 1, exportedAt: new Date().toISOString(), gameMode, settings, items, pools, collection, ledger, packs, pity });
+  const [collectibleCollection, collectiblePacks] = await Promise.all([
+    prisma.collectibleCollectionEntry.findMany({ where: { gameMode } }),
+    prisma.collectiblePackOpen.findMany({ where: { gameMode }, orderBy: { timestamp: "asc" } }),
+  ]);
+  response.json({
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    gameMode,
+    settings,
+    items,
+    pools,
+    collection,
+    ledger,
+    packs,
+    pity,
+    collectibleCollection,
+    collectiblePacks,
+  });
 });
 
 app.post("/api/import", async (request, response) => {
   const backup = parseOrThrow(backupSchema, request.body);
-  if ([...backup.items, ...backup.pools, ...backup.collection, ...backup.ledger, ...backup.packs, ...backup.pity]
+  const collectibleCollection = backup.collectibleCollection ?? [];
+  const collectiblePacks = backup.collectiblePacks ?? [];
+  if ([...backup.items, ...backup.pools, ...backup.collection, ...backup.ledger, ...backup.packs, ...backup.pity, ...collectibleCollection, ...collectiblePacks]
     .some((entry) => entry.gameMode !== backup.gameMode)) {
     throw Object.assign(new Error("Backup data contains mixed game modes."), { status: 400 });
+  }
+  const collectibleIds = new Set(COLLECTIBLE_CARDS.map((card) => card.id));
+  if (collectibleCollection.some((entry) => !collectibleIds.has(entry.cardId))) {
+    throw Object.assign(new Error("Backup contains an unknown Collectibles card."), { status: 400 });
+  }
+  for (const pack of collectiblePacks) {
+    let cards: unknown;
+    try {
+      cards = JSON.parse(pack.cards);
+    } catch {
+      throw Object.assign(new Error("Backup contains invalid Collectibles pack data."), { status: 400 });
+    }
+    const cardsResult = z.array(z.object({
+      id: z.string().refine((id) => collectibleIds.has(id)),
+      isNew: z.boolean(),
+      isFoil: z.boolean(),
+    })).safeParse(cards);
+    if (!cardsResult.success) {
+      throw Object.assign(new Error("Backup contains invalid Collectibles pack data."), { status: 400 });
+    }
   }
   for (const pack of backup.packs) {
     let cards: unknown;
@@ -681,6 +929,12 @@ app.post("/api/import", async (request, response) => {
   await prisma.$transaction(async (tx) => {
     const gameMode = backup.gameMode;
     await tx.collectionEntry.deleteMany({ where: { gameMode } });
+    if (backup.collectibleCollection !== undefined) {
+      await tx.collectibleCollectionEntry.deleteMany({ where: { gameMode } });
+    }
+    if (backup.collectiblePacks !== undefined) {
+      await tx.collectiblePackOpen.deleteMany({ where: { gameMode } });
+    }
     await tx.ledgerEntry.deleteMany({ where: { gameMode } });
     await tx.pityState.deleteMany({ where: { gameMode } });
     await tx.packOpen.deleteMany({ where: { gameMode } });
@@ -689,8 +943,18 @@ app.post("/api/import", async (request, response) => {
     if (backup.items.length) await tx.item.createMany({ data: backup.items });
     if (backup.pools.length) await tx.pool.createMany({ data: backup.pools });
     if (backup.collection.length) await tx.collectionEntry.createMany({ data: backup.collection.map((entry) => ({ ...entry, firstObtainedAt: new Date(entry.firstObtainedAt) })) });
+    if (backup.collectibleCollection?.length) {
+      await tx.collectibleCollectionEntry.createMany({
+        data: backup.collectibleCollection.map((entry) => ({ ...entry, firstObtainedAt: new Date(entry.firstObtainedAt) })),
+      });
+    }
     if (backup.ledger.length) await tx.ledgerEntry.createMany({ data: backup.ledger.map((entry) => ({ ...entry, timestamp: new Date(entry.timestamp) })) });
     if (backup.packs.length) await tx.packOpen.createMany({ data: backup.packs.map((entry) => ({ ...entry, timestamp: new Date(entry.timestamp) })) });
+    if (backup.collectiblePacks?.length) {
+      await tx.collectiblePackOpen.createMany({
+        data: backup.collectiblePacks.map((entry) => ({ ...entry, timestamp: new Date(entry.timestamp) })),
+      });
+    }
     if (backup.pity.length) await tx.pityState.createMany({ data: backup.pity });
     const importedSettings = {
       ...backup.settings,
@@ -723,6 +987,7 @@ app.post("/api/reset", async (_request, response) => {
       .map((entry) => reverseLedgerEntry(entry, `Wipe reset: reverse ${entry.note ?? entry.type}`));
     if (adjustments.length) await tx.ledgerEntry.createMany({ data: adjustments });
     await tx.collectionEntry.deleteMany({ where: { gameMode } });
+    await tx.collectibleCollectionEntry.deleteMany({ where: { gameMode } });
     await tx.pityState.deleteMany({ where: { gameMode } });
   });
   publishEvent("hud_update", await getHud(gameMode));

@@ -144,6 +144,94 @@ h2 { font: 600 22px var(--display); }
 .flip-button { display: block; min-width: 190px; margin: 17px auto 0; }
 @keyframes reveal-panel-in { from { opacity: 0; transform: translateY(12px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
+.collectibles-pack-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; }
+.collectibles-booster, .collectibles-buy-panel { padding: 21px; background: #191b16; border: 1px solid #3d4132; }
+.collectibles-booster { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); align-items: center; gap: 0 25px; }
+.collectibles-booster > .eyebrow { grid-column: 1 / -1; }
+.collectibles-booster > p:last-child { margin: 16px 0 0; color: #a0a38f; font-size: 11px; line-height: 1.6; }
+.collectibles-booster-art { position: relative; display: grid; min-height: 224px; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #4b5030, #22251b 68%, #171914); border: 1px solid #53583a; }
+.collectibles-booster-art::before, .collectibles-booster-art::after { position: absolute; width: 170px; height: 170px; border: 1px solid #c3cc7230; transform: rotate(45deg); content: ""; }
+.collectibles-booster-art::after { width: 125px; height: 125px; transform: rotate(22deg); }
+.collectibles-booster-art > b { z-index: 1; color: #e8e9d8; font: 800 29px/0.95 var(--display); letter-spacing: 3px; text-align: center; text-shadow: 0 4px 16px #000; }
+.booster-card { position: absolute; top: 28px; left: calc(50% - 34px); display: grid; width: 78px; height: 112px; place-items: end center; padding-bottom: 10px; color: #c1c89b; background: linear-gradient(145deg, #36392b, #171914); border: 1px solid #7d8257; box-shadow: 0 7px 20px #0008; font: 8px var(--mono); letter-spacing: 1px; }
+.booster-card-back { transform: translateX(48px) rotate(15deg); }
+.booster-card-middle { transform: translateX(-48px) rotate(-15deg); }
+.booster-card-front { top: 42px; z-index: 1; color: #e8d695; }
+.collectibles-category-legend { display: flex; flex-wrap: wrap; gap: 7px; align-content: center; }
+.collectibles-category-legend span { padding: 7px 10px; color: #d3d5bd; background: #25281e; border: 1px solid #454a35; font: 9px var(--mono); text-transform: uppercase; }
+.collectibles-buy-panel h2 { margin: 0 0 8px; }
+.collectibles-buy-panel > p:not(.eyebrow) { color: #a0a38f; font-size: 11px; line-height: 1.55; }
+.collectibles-pack-facts { display: grid; gap: 9px; margin: 17px 0; padding: 13px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.collectibles-pack-facts span { display: flex; justify-content: space-between; color: #898c7d; font: 9px var(--mono); }
+.collectibles-pack-facts b { color: #e2e2d4; font-weight: 400; }
+.collectibles-buy-panel .collectibles-separation { margin-bottom: 0; padding: 9px; color: #c3cc72; background: #22251a; border: 1px solid #414632; font-size: 9px; }
+.collectibles-buy-panel .primary-button { width: 100%; margin-top: 14px; }
+.collectible-pack-history { display: grid; gap: 7px; }
+.collectible-history-row { display: grid; grid-template-columns: minmax(130px, 190px) 1fr; align-items: center; gap: 12px; padding: 11px 13px; background: #191b16; border: 1px solid #34372e; }
+.collectible-history-row > div:first-child b, .collectible-history-row > div:first-child small { display: block; }
+.collectible-history-row > div:first-child b { font-size: 11px; }
+.collectible-history-row > div:first-child small { margin-top: 5px; color: #818477; font: 8px var(--mono); }
+.collectible-history-cards { display: flex; flex-wrap: wrap; gap: 5px 10px; }
+.collectible-history-cards span { font-size: 10px; }
+.collectible-history-row .empty-state { margin: 0; }
+.collectible-card-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.collectible-reveal-panel { width: min(1280px, 100%); }
+.collectible-reveal-card { position: relative; min-width: 0; min-height: 410px; padding: 0; background: transparent; border: 0; perspective: 900px; }
+.collectible-reveal-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.collectible-reveal-inner { position: relative; display: block; width: 100%; height: 100%; min-height: 410px; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.2, .7, .2, 1); }
+.collectible-reveal-card.revealed .collectible-reveal-inner { transform: rotateY(180deg); }
+.collectible-reveal-inner > .card-back, .collectible-reveal-inner > .card-front { position: absolute; inset: 0; display: flex; backface-visibility: hidden; -webkit-backface-visibility: hidden; border: 1px solid #70784c; }
+.collectible-reveal-inner > .card-back { align-items: center; justify-content: center; color: #c3cc72; font: 800 78px var(--display); background: linear-gradient(145deg, #35392a, #171914); }
+.collectible-reveal-inner > .card-front { padding: 0; transform: rotateY(180deg); background: #171914; }
+.collectible-face { position: relative; display: flex; width: 100%; min-width: 0; min-height: 410px; flex-direction: column; overflow: hidden; padding: 10px; color: #e9e9de; background: linear-gradient(165deg, #272a20, #171914 55%); border: 2px solid #51563a; text-align: left; }
+.collectible-face::before { position: absolute; z-index: 3; top: 0; right: 0; left: 0; height: 5px; background: var(--collectible-rarity); content: ""; }
+.collectible-face.rarity-common { --collectible-rarity: #a6aa9d; --collectible-rarity-glow: #a6aa9d24; border-color: var(--collectible-rarity); box-shadow: inset 0 0 18px var(--collectible-rarity-glow), 0 0 7px var(--collectible-rarity-glow); }
+.collectible-face.rarity-uncommon { --collectible-rarity: #a5c878; --collectible-rarity-glow: #a5c8782b; border-color: var(--collectible-rarity); box-shadow: inset 0 0 18px var(--collectible-rarity-glow), 0 0 9px var(--collectible-rarity-glow); }
+.collectible-face.rarity-rare { --collectible-rarity: #7fc8df; --collectible-rarity-glow: #7fc8df35; border-color: var(--collectible-rarity); box-shadow: inset 0 0 18px var(--collectible-rarity-glow), 0 0 10px var(--collectible-rarity-glow); }
+.collectible-face.rarity-epic { --collectible-rarity: #c99de7; --collectible-rarity-glow: #c99de740; border-color: var(--collectible-rarity); box-shadow: inset 0 0 20px var(--collectible-rarity-glow), 0 0 13px var(--collectible-rarity-glow); }
+.collectible-face.rarity-legendary { --collectible-rarity: #f0cb70; --collectible-rarity-glow: #f0cb7050; border-color: var(--collectible-rarity); box-shadow: inset 0 0 22px var(--collectible-rarity-glow), 0 0 16px var(--collectible-rarity-glow); }
+.collectible-face.foil::after { position: absolute; z-index: 2; inset: 0; pointer-events: none; background: linear-gradient(125deg, transparent 22%, #f5e9a422 45%, #9fdbcd25 50%, transparent 70%); content: ""; }
+.collectible-art { position: relative; min-height: 145px; flex: 0 0 145px; overflow: hidden; background: radial-gradient(ellipse at 50% 45%, #51543b, #22251b 68%, #171914); border: 1px solid #464a34; }
+.collectible-art::after { position: absolute; inset: 38% 0 0; pointer-events: none; background: linear-gradient(transparent, #11140fe8); content: ""; }
+.collectible-art > img { width: 100%; height: 100%; object-fit: cover; }
+.collectible-art > span:not(.collectible-cost) { position: absolute; top: 50%; left: 50%; z-index: 1; color: #e5e3c9; font: 800 47px var(--display); text-shadow: 0 3px 12px #000; transform: translate(-50%, -50%); }
+.collectible-art > .collectible-art-category { position: absolute; top: 7px; right: 7px; z-index: 1; color: #e4e6d4; font: 7px var(--mono); letter-spacing: 1px; text-shadow: 0 1px 5px #000; }
+.collectible-cost { position: absolute; top: 7px; left: 7px; z-index: 1; display: grid; width: 38px; height: 40px; place-items: center; color: #171914; background: #d7d9bb; border: 2px solid #25281e; border-radius: 50%; text-align: center; }
+.collectible-cost small { position: absolute; top: 4px; right: 0; left: 0; font: 6px/1 var(--mono); }
+.collectible-cost b { font: 700 14px/1 var(--display); }
+.collectible-art-stats { position: absolute; right: 7px; bottom: 6px; left: 7px; z-index: 1; display: flex; justify-content: flex-end; gap: 12px; }
+.collectible-art-stats span { display: flex; width: 25px; flex-direction: column; align-items: center; gap: 1px; color: #f0f0df; text-shadow: 0 1px 4px #000; }
+.collectible-art-stats b { font: 700 13px/1 var(--display); }
+.collectible-art-stats small { color: #c8cbb8; font: 6px/1 var(--mono); }
+.collectible-art-boss { background: radial-gradient(ellipse at 50% 45%, #50312b, #2b201b 68%, #171914); }
+.collectible-art-trader { background: radial-gradient(ellipse at 50% 45%, #384333, #22251b 68%, #171914); }
+.collectible-art-map { background: radial-gradient(ellipse at 50% 45%, #31434b, #20251f 68%, #171914); }
+.collectible-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 5px; margin: 8px 0 6px; }
+.collectible-card-heading > div { min-width: 0; }
+.collectible-card-heading > div small { display: block; margin-bottom: 3px; color: #9da186; font: 6px var(--mono); letter-spacing: .5px; }
+.collectible-card-heading b { display: block; min-width: 0; font: 600 14px/1.1 var(--display); }
+.collectible-card-heading > span { flex: 0 0 auto; padding: 4px 6px; color: #171914; background: var(--collectible-rarity); border: 1px solid var(--collectible-rarity); font: 700 7px var(--mono); }
+.collectible-traits { display: flex; min-height: 17px; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
+.collectible-traits span { padding: 3px 5px; color: #c7cbb0; background: #272a20; border: 1px solid #414438; font: 6px var(--mono); text-transform: uppercase; }
+.collectible-spell { padding: 7px; background: #24271e; border-left: 2px solid #b5bd68; }
+.collectible-spell > small { display: block; overflow: hidden; color: #c3cc72; font: 7px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.collectible-spell p { display: -webkit-box; overflow: hidden; margin: 5px 0 0; color: #dcdecd; font-size: 8px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.collectible-story { display: -webkit-box; overflow: hidden; margin: 7px 0 4px; color: #aaaD9c; font: italic 8px/1.4 var(--display); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.collectible-card-footer { display: flex; min-height: 13px; align-items: end; gap: 7px; margin-top: auto; color: #9da186; font: 7px var(--mono); }
+.collectible-reward { margin-right: auto; }
+.collectible-reward b { color: #e1d49b; }
+.collectible-health { display: grid; width: 23px; height: 23px; place-items: center; color: #171914; background: #c3cc72; border-radius: 50%; font: 700 12px var(--display); }
+.collectible-card-footer em { color: #171914; background: #c3cc72; font-style: normal; }
+.collectible-card-footer i { color: #f1d781; font-style: normal; }
+.collectible-locked { filter: saturate(.45); }
+.collectible-artwork-warning { margin: 0 0 14px; padding: 9px 12px; color: #e2d49a; background: #242219; border: 1px solid #595033; font-size: 11px; }
+.collectible-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+.collectible-filters button { padding: 8px 11px; color: #97998c; background: transparent; border: 1px solid #35382e; font: 9px var(--mono); }
+.collectible-filters button:hover, .collectible-filters button.selected { color: var(--accent); background: #22261a; border-color: #424832; }
+.collectible-filters input { flex: 1; min-width: 170px; height: 34px; padding: 0 10px; color: #d9dacd; background: #1c1e19; border: 1px solid #373a31; font-size: 10px; }
+.collectible-collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); align-items: stretch; gap: 10px; }
+.collectible-collection-grid .collectible-face { min-height: 390px; }
+
 .collection-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .trader-progress { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .trader-progress > div { display: grid; grid-template-columns: 1fr auto; gap: 7px; padding: 10px; background: #191b16; border: 1px solid #34372e; }
@@ -244,8 +332,12 @@ html:has(.overlay-canvas), body:has(.overlay-canvas), body:has(.overlay-canvas) 
 .overlay-pack { width: min(1120px, 90vw); padding: 20px; background: linear-gradient(180deg, #11140ed9, #11140eaa); border: 1px solid #b1b77a90; box-shadow: 0 15px 60px #0009; animation: overlay-in .25s ease-out; }
 .overlay-title { margin-bottom: 15px; color: #e8e7d5; font: 700 26px var(--display); letter-spacing: 2px; text-align: center; text-shadow: 0 2px 5px #000; }
 .god-pack .overlay-title { color: #f5d875; }
+.collectible-overlay-pack { width: min(1800px, 96vw); padding: 0; background: transparent; border: 0; box-shadow: none; }
+.collectible-overlay-pack .overlay-title { display: none; }
+.collectible-overlay-pack .overlay-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .overlay-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .overlay-card { height: 270px; perspective: 700px; background: transparent; }
+.overlay-collectible-card { width: 100%; height: auto; aspect-ratio: .585; }
 .overlay-card-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .5s ease; }
 .overlay-card.show .overlay-card-inner { transform: rotateY(180deg); }
 .overlay-card-back, .overlay-card-front { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; backface-visibility: hidden; border: 2px solid #858a5e; background: linear-gradient(145deg, #34382aee, #151711f2); box-shadow: 0 4px 15px #0008; }
@@ -253,6 +345,28 @@ html:has(.overlay-canvas), body:has(.overlay-canvas), body:has(.overlay-canvas) 
 .overlay-card-front { flex-direction: column; gap: 8px; padding: 12px 10px; transform: rotateY(180deg); background: linear-gradient(145deg, #252920f5, #11140ff5); text-align: center; }
 .overlay-card-art { display: grid; width: 100%; min-height: 0; flex: 1; place-items: center; overflow: hidden; background: radial-gradient(ellipse, #41463288, #14161022 72%); }
 .overlay-card-art img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 3px 6px #000b); }
+.overlay-collectible-card .overlay-collectible-card-front { display: block; padding: 0; transform: rotateY(180deg); background: transparent; border: 0; box-shadow: none; }
+.overlay-collectible-card .collectible-face { width: 100%; height: 100%; min-height: 0; padding: 8px; }
+.overlay-collectible-card .collectible-art { min-height: 100px; flex: 1 1 34%; }
+.overlay-collectible-card .collectible-cost { width: 42px; height: 44px; }
+.overlay-collectible-card .collectible-cost small { font-size: 7px; }
+.overlay-collectible-card .collectible-cost b { font-size: 16px; }
+.overlay-collectible-card .collectible-art-stats { gap: 5px; }
+.overlay-collectible-card .collectible-art-stats span { width: 31px; }
+.overlay-collectible-card .collectible-art-stats b { font-size: 16px; }
+.overlay-collectible-card .collectible-art-stats small { font-size: 7px; }
+.overlay-collectible-card .collectible-card-heading { margin: 6px 0 5px; }
+.overlay-collectible-card .collectible-card-heading > div small { font-size: 7px; }
+.overlay-collectible-card .collectible-card-heading b { font-size: clamp(14px, 1.05vw, 19px); }
+.overlay-collectible-card .collectible-card-heading > span { padding: 4px 5px; font-size: 8px; }
+.overlay-collectible-card .collectible-traits { min-height: 15px; gap: 3px; margin-bottom: 5px; }
+.overlay-collectible-card .collectible-traits span { padding: 3px 4px; font-size: 7px; }
+.overlay-collectible-card .collectible-spell { padding: 6px; }
+.overlay-collectible-card .collectible-spell > small { font-size: 8px; }
+.overlay-collectible-card .collectible-spell p { margin-top: 4px; font-size: 9px; line-height: 1.3; -webkit-line-clamp: 3; }
+.overlay-collectible-card .collectible-story { display: -webkit-box; overflow: hidden; margin: 6px 0 3px; padding: 5px 6px; color: #e2e4d8; background: #22251e; border-top: 1px solid #414438; font-family: Inter, "Segoe UI", sans-serif; font-size: clamp(10px, .75vw, 13px); font-style: italic; font-weight: 500; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.overlay-collectible-card .collectible-card-footer { gap: 5px; font-size: 7px; }
+.overlay-collectible-card .collectible-health { width: 27px; height: 27px; font-size: 14px; }
 .overlay-card-placeholder { color: #777b64; font: 700 40px var(--display); }
 .overlay-card-name { display: -webkit-box; max-width: 100%; overflow: hidden; color: #f0f0e5; font: 600 16px var(--display); text-shadow: 0 2px 3px #000; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .overlay-card-front b { color: #c3cc72; font: 600 12px var(--mono); letter-spacing: 1px; }
@@ -270,6 +384,8 @@ html:has(.overlay-canvas), body:has(.overlay-canvas), body:has(.overlay-canvas) 
   .brand { min-width: auto; }
   .progress-mini { display: none; }
   .pack-layout { grid-template-columns: minmax(0, 1fr) 255px; }
+  .collectibles-pack-layout { grid-template-columns: 1fr; }
+  .collectible-card-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 680px) {
   .topbar { height: auto; min-height: 72px; flex-wrap: wrap; gap: 10px; padding: 12px 14px; }
@@ -308,6 +424,17 @@ html:has(.overlay-canvas), body:has(.overlay-canvas), body:has(.overlay-canvas) 
   .overlay-cards { gap: 5px; }
   .reveal-backdrop { padding: 10px; }
   .reveal-panel { max-height: calc(100vh - 20px); padding: 14px; }
+  .collectibles-booster { grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 0 14px; padding: 14px; }
+  .collectibles-booster-art { min-height: 180px; }
+  .collectible-card-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .collectible-reveal-card, .collectible-reveal-inner, .collectible-face { min-height: 410px; }
+  .collectible-reveal-panel { padding: 12px; }
+  .collectible-art { min-height: 120px; flex-basis: 120px; }
+  .collectible-card-heading b { font-size: 12px; }
+  .collectible-spell { padding: 5px; }
+  .collectible-spell p { -webkit-line-clamp: 3; }
+  .collectible-story { -webkit-line-clamp: 2; }
+  .collectible-history-row { grid-template-columns: 1fr; gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,6 +11,7 @@ export const openPackSchema = z.object({
   poolKey: z.string().min(1).max(120),
   idempotencyKey: z.string().uuid(),
 });
+export const openCollectiblePackSchema = z.object({ idempotencyKey: z.string().uuid() });
 export const craftSchema = z.object({ itemId: z.string().min(1).max(120) });
 export const flipPackSchema = z.union([
   z.object({ index: z.number().int().min(0) }),
@@ -110,5 +111,20 @@ export const backupSchema = z.object({
     packsSinceNew: z.number().int().nonnegative(),
     packsSinceEpic: z.number().int().nonnegative(),
   })),
+  collectibleCollection: z.array(z.object({
+    cardId: z.string(),
+    gameMode: gameModeSchema,
+    ownedCount: z.number().int().nonnegative(),
+    foilCount: z.number().int().nonnegative(),
+    firstObtainedAt: isoDateSchema,
+  })).optional(),
+  collectiblePacks: z.array(z.object({
+    id: z.string(),
+    idempotencyKey: z.string().uuid(),
+    gameMode: gameModeSchema,
+    cost: z.number().int().nonnegative(),
+    cards: z.string(),
+    timestamp: isoDateSchema,
+  })).optional(),
 });
 

@@ -47,12 +47,18 @@ Pool blocklist and item-specific rarity overrides live in `src/server/pool-confi
 
 Settings includes item-class toggles, including ammunition/bullets. Disabled classes are excluded from pack draws and hidden from the active collection, but owned cards are preserved and return when re-enabled. Items tagged with multiple classes are excluded if any tagged class is disabled.
 
+## Collectibles
+
+The separate **Collectibles** pack contains original Boss and Trader units, Map hideouts, and Cover and Lethal tactic cards. Trader portraits and boss art come from the public Tarkov JSON API; map artwork uses the map wiki links exposed by that API. Cards show cost, attack, resources, reputation, reward, health, traits, an original ability, and a short story. Images are cached under `public/images/collectibles`; if a public image source is unavailable, the cards remain usable and display a warning. Packs contain five unique cards and guarantee at least one Rare-or-better. Collectible pack history, duplicate/foil counts, and the collectible collection are separate from tarkov.dev item packs; collectible packs use the same coin balance. Item-class settings do not affect collectibles. Backup exports and imports include the collectible collection and pack history.
+
+Collectibles are original fan-made card text and do not reproduce Magic: The Gathering card text or artwork. Their printed spells are thematic card effects, not interactive battle mechanics in the app.
+
 ## OBS
 
 1. Start the app and add an OBS **Browser Source**.
 2. During `npm run dev`, use `http://localhost:5173/overlay?hud=true`; after a production build and `npm start`, use `http://localhost:3000/overlay?hud=true`. Set the source to 1920 × 1080.
 3. Keep the background transparent. Enable **Shutdown source when not visible** and **Refresh browser when scene becomes active**.
-4. Use **Test Overlay** in Settings. Set `overlayMode` to **synced** to reveal cards only as they are flipped in the dashboard.
+4. Use **Test Overlay** in Settings. Both trader packs and Collectibles packs appear in the overlay. Set `overlayMode` to **synced** to reveal cards only as they are flipped in the dashboard.
 
 For local use, Settings can generate a per-overlay token and show the URL once; regenerate it if it is exposed. For hosted deployments, set a long random `OVERLAY_TOKEN` and use `?key=<token>` in the overlay URL. Keep the token private. The API is designed for local single-user operation and does not provide multi-user authentication.
 

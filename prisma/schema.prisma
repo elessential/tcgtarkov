@@ -51,6 +51,17 @@ model CollectionEntry {
   @@id([itemId, gameMode])
 }
 
+model CollectibleCollectionEntry {
+  cardId          String
+  gameMode        String
+  ownedCount      Int      @default(0)
+  foilCount       Int      @default(0)
+  firstObtainedAt DateTime @default(now())
+
+  @@id([cardId, gameMode])
+  @@index([gameMode])
+}
+
 model LedgerEntry {
   id          String   @id @default(cuid())
   timestamp   DateTime @default(now())
@@ -77,6 +88,17 @@ model PackOpen {
   timestamp      DateTime @default(now())
   flipped        Boolean  @default(false)
   flippedCards   String   @default("[]")
+  @@index([gameMode, timestamp])
+}
+
+model CollectiblePackOpen {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  gameMode       String
+  cost           Int
+  cards          String
+  timestamp      DateTime @default(now())
+
   @@index([gameMode, timestamp])
 }
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ITEM_CLASSES, ITEM_CLASS_IDS, type DrawnCard, type ItemClass, type Rarity, type Trader } from "../shared/game.js";
+import { COLLECTIBLE_CATEGORIES, type CollectibleCard, type CollectibleCategory, type DrawnCollectible } from "../shared/collectibles.js";
 
-type Tab = "Packs" | "Collection" | "History & Stats" | "Settings";
+type Tab = "Packs" | "Item Collection" | "Collectibles" | "Collectible Collection" | "History & Stats" | "Settings";
 interface Item {
   id: string;
   name: string;
@@ -42,6 +43,33 @@ interface OpenPack {
   wasGodPack: boolean;
   flipped: boolean;
   cards: DrawnCard[];
+}
+interface DrawnCollectibleCard extends CollectibleCard {
+  isNew: boolean;
+  isFoil: boolean;
+  imageLocal?: string | null;
+  imageUrl?: string | null;
+}
+interface CollectibleCollectionCard extends CollectibleCard {
+  ownedCount: number;
+  foilCount: number;
+  imageLocal?: string | null;
+  imageUrl?: string | null;
+}
+interface CollectiblePack {
+  id: string;
+  timestamp: string;
+  cost: number;
+  cards: DrawnCollectibleCard[];
+}
+interface CollectiblesData {
+  cards: CollectibleCollectionCard[];
+  packs: CollectiblePack[];
+  packPrice: number;
+  packSize: number;
+  collectedCount: number;
+  totalCount: number;
+  artworkWarning?: string | null;
 }
 interface Settings {
   xpPerCoin: number;
@@ -91,10 +119,13 @@ function App() {
   const [tab, setTab] = useState<Tab>("Packs");
   const [state, setState] = useState<AppState | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  const [collectibles, setCollectibles] = useState<CollectiblesData | null>(null);
   const [activePool, setActivePool] = useState<string | null>(null);
   const [selectedTrader, setSelectedTrader] = useState<string>("All");
   const [openPack, setOpenPack] = useState<OpenPack | null>(null);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [openCollectiblePack, setOpenCollectiblePack] = useState<CollectiblePack | null>(null);
+  const [revealedCollectibles, setRevealedCollectibles] = useState<Set<number>>(new Set());
   const [xpInput, setXpInput] = useState("");
   const [skipAnimation, setSkipAnimation] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -102,13 +133,18 @@ function App() {
   const [success, setSuccess] = useState("");
   const [overlaySecret, setOverlaySecret] = useState("");
   const [filters, setFilters] = useState({ trader: "All", level: "All", rarity: "All", status: "All", search: "" });
+  const [collectibleFilters, setCollectibleFilters] = useState<{ category: "All" | CollectibleCategory; search: string }>({ category: "All", search: "" });
 
   const refresh = useCallback(async () => {
     const next = await request<AppState>("/api/state");
     setState(next);
     setActivePool((current) => current && next.pools.some((pool) => pool.poolKey === current) ? current : next.pools[0]?.poolKey ?? null);
-    const allItems = await request<Item[]>("/api/items");
+    const [allItems, nextCollectibles] = await Promise.all([
+      request<Item[]>("/api/items"),
+      request<CollectiblesData>("/api/collectibles"),
+    ]);
     setItems(allItems);
+    setCollectibles(nextCollectibles);
   }, []);
 
   useEffect(() => {
@@ -141,6 +177,10 @@ function App() {
     if (filters.status === "Missing" && item.ownedCount > 0) return false;
     return item.name.toLowerCase().includes(filters.search.toLowerCase());
   }), [filters, items]);
+  const filteredCollectibles = useMemo(() => (collectibles?.cards ?? []).filter((card) => {
+    if (collectibleFilters.category !== "All" && card.category !== collectibleFilters.category) return false;
+    return card.name.toLowerCase().includes(collectibleFilters.search.toLowerCase());
+  }), [collectibleFilters, collectibles]);
 
   const run = async (action: () => Promise<void>) => {
     setError("");
@@ -177,6 +217,53 @@ function App() {
       await refresh();
     });
   };
+
+  const buyCollectiblePack = () => void run(async () => {
+    const result = await request<{ pack: CollectiblePack }>("/api/collectibles/open", {
+      method: "POST",
+      body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+    });
+    if (skipAnimation && state?.settings.overlayMode === "synced") {
+      await request(`/api/collectibles/${result.pack.id}/flip`, { method: "POST", body: JSON.stringify({ all: true }) });
+    }
+    setOpenCollectiblePack(result.pack);
+    setRevealedCollectibles(skipAnimation ? new Set(result.pack.cards.map((_, index) => index)) : new Set());
+    await refresh();
+  });
+
+  const revealCollectibleCard = useCallback(async (index: number) => {
+    if (!openCollectiblePack || revealedCollectibles.has(index)) return;
+    if (state?.settings.overlayMode === "synced") {
+      await request(`/api/collectibles/${openCollectiblePack.id}/flip`, {
+        method: "POST",
+        body: JSON.stringify({ index }),
+      });
+    }
+    setRevealedCollectibles((previous) => new Set(previous).add(index));
+  }, [openCollectiblePack, revealedCollectibles, state?.settings.overlayMode]);
+
+  useEffect(() => {
+    if (!openCollectiblePack || tab !== "Collectibles" || skipAnimation || revealedCollectibles.size >= openCollectiblePack.cards.length) return;
+    const nextIndex = openCollectiblePack.cards.findIndex((_, index) => !revealedCollectibles.has(index));
+    if (nextIndex < 0) return;
+    const timer = window.setTimeout(() => {
+      void revealCollectibleCard(nextIndex).catch((caught: unknown) => {
+        setError(caught instanceof Error ? caught.message : "Could not reveal the next Collectibles card.");
+      });
+    }, 420);
+    return () => window.clearTimeout(timer);
+  }, [openCollectiblePack, revealCollectibleCard, revealedCollectibles, skipAnimation, tab]);
+
+  const flipAllCollectibles = () => void run(async () => {
+    if (!openCollectiblePack) return;
+    if (state?.settings.overlayMode === "synced") {
+      await request(`/api/collectibles/${openCollectiblePack.id}/flip`, {
+        method: "POST",
+        body: JSON.stringify({ all: true }),
+      });
+    }
+    setRevealedCollectibles(new Set(openCollectiblePack.cards.map((_, index) => index)));
+  });
 
   const flipCard = useCallback(async (index: number) => {
     if (!openPack || revealed.has(index)) return;
@@ -239,7 +326,7 @@ function App() {
   });
 
   const reset = () => run(async () => {
-    if (!window.confirm("Wipe coins, scrap, collection and pity for this game mode? Pack history will be preserved.")) return;
+    if (!window.confirm("Wipe coins, scrap, both collections and pity for this game mode? Pack history will be preserved.")) return;
     await request("/api/reset", { method: "POST" });
     await refresh();
     setSuccess("Collection and balances reset. Pull history was preserved.");
@@ -262,11 +349,11 @@ function App() {
           <button className="add-xp" disabled={busy || Number(xpInput) < 1} onClick={() => void addXp(Number(xpInput))}>+ ADD XP</button>
           <div className="quick-xp">{[1000, 2500, 5000].map((amount) => <button key={amount} onClick={() => void addXp(amount)}>+{amount >= 1000 ? `${amount / 1000}K` : amount}</button>)}</div>
         </div>
-        <div className="progress-mini"><span>COLLECTION</span><b>{distinctOwned} <i>/</i> {itemCount}</b><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div>
+        <div className="progress-mini"><span>ITEM COLLECTION</span><b>{distinctOwned} <i>/</i> {itemCount}</b><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div>
       </header>
 
       <nav className="main-nav" aria-label="Main navigation">
-        {(["Packs", "Collection", "History & Stats", "Settings"] as Tab[]).map((name) => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}>{name}</button>)}
+        {(["Packs", "Item Collection", "Collectibles", "Collectible Collection", "History & Stats", "Settings"] as Tab[]).map((name) => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}>{name}</button>)}
         <a className="overlay-link" href="/overlay" target="_blank" rel="noreferrer">↗ OBS OVERLAY</a>
       </nav>
 
@@ -310,8 +397,56 @@ function App() {
           </div>}
         </section>}
 
-        {tab === "Collection" && <section>
-          <div className="page-heading"><div><p className="eyebrow">THE ARMORY</p><h1>Collection</h1><p className="subheading">{distinctOwned} / {itemCount} cards secured · {progress.toFixed(1)}% complete</p></div><div className="mode-pill">{state?.scrap ?? 0} SCRAP</div></div>
+        {tab === "Collectibles" && collectibles && <section>
+          <div className="page-heading"><div><p className="eyebrow">THE ARCHIVE · UNITS · HIDEOUTS · COVERS · LETHAL</p><h1>Collectibles</h1><p className="subheading">Original raid legends, field reports, and signature spells.</p></div><div className="mode-pill">{collectibles.collectedCount} / {collectibles.totalCount} DISCOVERED</div></div>
+          {collectibles.artworkWarning && <p className="collectible-artwork-warning" role="status">{collectibles.artworkWarning} The cards remain available without images.</p>}
+          <div className="collectibles-pack-layout">
+            <div className="collectibles-booster">
+              <p className="eyebrow">THE TARKOV CHRONICLES</p>
+              <div className="collectibles-booster-art" aria-hidden="true">
+                <span className="booster-card booster-card-back">MAPS</span>
+                <span className="booster-card booster-card-middle">TRADERS</span>
+                <span className="booster-card booster-card-front">BOSSES</span>
+                <b>FIELD<br />LEGENDS</b>
+              </div>
+              <div className="collectibles-category-legend">{COLLECTIBLE_CATEGORIES.map((category) => <span key={category}>{category}</span>)}</div>
+              <p>Every card is an original field chronicle with distinct stats, a raid spell, and a piece of local lore.</p>
+            </div>
+            <div className="collectibles-buy-panel">
+              <p className="eyebrow">COLLECTIBLE PACK</p>
+              <h2>Deal a new hand</h2>
+              <p>Five unique cards per pack, with at least one Rare-or-better. Find bosses, traders, and locations in their own collection.</p>
+              <div className="collectibles-pack-facts"><span>CARDS <b>{collectibles.packSize}</b></span><span>PRICE <b>{collectibles.packPrice.toLocaleString()} COINS</b></span><span>SET <b>{collectibles.totalCount} CARDS</b></span></div>
+              <p className="collectibles-separation">Uses your coin balance, but has separate packs, history, and collection. Item-class settings do not affect these cards.</p>
+              <button className="primary-button" disabled={busy || (state?.coins ?? 0) < collectibles.packPrice} onClick={buyCollectiblePack}>{busy ? "OPENING..." : "BUY COLLECTIBLE PACK"}</button>
+              {(state?.coins ?? 0) < collectibles.packPrice && <small className="insufficient">Add more raid XP to open a Collectibles pack.</small>}
+            </div>
+          </div>
+          <h2 className="section-title">Recent Collectibles packs</h2>
+          <div className="collectible-pack-history">{collectibles.packs.length === 0
+            ? <p className="empty-state">No Collectibles packs opened yet. Open one to start a separate collection.</p>
+            : collectibles.packs.map((pack) => <article className="collectible-history-row" key={pack.id}><div><b>Collectibles pack</b><small>{new Date(pack.timestamp).toLocaleString()} · {pack.cost.toLocaleString()} coins</small></div><div className="collectible-history-cards">{pack.cards.map((card, index) => <span className={`rarity-text-${card.rarity.toLowerCase()}`} key={`${pack.id}-${index}`} title={`${card.rarity}: ${card.name}`}>{card.name}</span>)}</div></article>)}
+          </div>
+          {openCollectiblePack && <div className="reveal-backdrop">
+            <div className="reveal-panel collectible-reveal-panel" role="dialog" aria-modal="true" aria-labelledby="collectible-reveal-title">
+              <div className="reveal-heading"><div><p className="eyebrow">THE TARKOV CHRONICLES</p><h2 id="collectible-reveal-title">Your new field legends</h2></div><button className="secondary-button" autoFocus onClick={() => setOpenCollectiblePack(null)}>CLOSE</button></div>
+              <div className="collectible-card-row">{openCollectiblePack.cards.map((card, index) => <button key={`${openCollectiblePack.id}-${index}`} aria-label={revealedCollectibles.has(index) ? `${card.name}, ${card.rarity}` : "Reveal collectible card"} className={`collectible-reveal-card rarity-${card.rarity.toLowerCase()} ${revealedCollectibles.has(index) ? "revealed" : ""} ${card.isFoil ? "foil" : ""}`} onClick={() => void run(() => revealCollectibleCard(index))}><span className="collectible-reveal-inner"><span className="card-back">T</span><span className="card-front"><CollectibleFace card={card} forceRevealed isNew={card.isNew} isFoil={card.isFoil} /></span></span></button>)}</div>
+              <button className="primary-button flip-button" disabled={revealedCollectibles.size === openCollectiblePack.cards.length} onClick={flipAllCollectibles}>REVEAL ALL</button>
+            </div>
+          </div>}
+        </section>}
+
+        {tab === "Collectible Collection" && collectibles && <section>
+          <div className="page-heading"><div><p className="eyebrow">THE CHRONICLES · SEPARATE COLLECTION</p><h1>Collectible Collection</h1><p className="subheading">{collectibles.collectedCount} / {collectibles.totalCount} unique cards discovered · {collectibles.totalCount ? ((collectibles.collectedCount / collectibles.totalCount) * 100).toFixed(1) : "0.0"}% complete</p></div><div className="mode-pill">{collectibles.cards.reduce((sum, card) => sum + card.foilCount, 0)} FOILS</div></div>
+          <div className="collectible-filters">
+            {(["All", ...COLLECTIBLE_CATEGORIES] as const).map((category) => <button key={category} className={collectibleFilters.category === category ? "selected" : ""} onClick={() => setCollectibleFilters({ ...collectibleFilters, category })}>{category === "All" ? "ALL CARDS" : `${category.toUpperCase()}S`}</button>)}
+            <input aria-label="Search collectibles" placeholder="SEARCH COLLECTIBLES..." value={collectibleFilters.search} onChange={(event) => setCollectibleFilters({ ...collectibleFilters, search: event.target.value })} />
+          </div>
+          <div className="collectible-collection-grid">{filteredCollectibles.map((card) => <CollectibleFace key={card.id} card={card} ownedCount={card.ownedCount} foilCount={card.foilCount} />)}</div>
+        </section>}
+
+        {tab === "Item Collection" && <section>
+          <div className="page-heading"><div><p className="eyebrow">THE ARMORY</p><h1>Item Collection</h1><p className="subheading">{distinctOwned} / {itemCount} cards secured · {progress.toFixed(1)}% complete</p></div><div className="mode-pill">{state?.scrap ?? 0} SCRAP</div></div>
           <div className="trader-progress">{traderProgress.map(([trader, counts]) => <div key={trader}><span>{trader.toUpperCase()}</span><b>{counts.collected}/{counts.total}</b><i><em style={{ width: `${counts.total ? (counts.collected / counts.total) * 100 : 0}%` }} /></i></div>)}</div>
           <div className="collection-filters">
             <select value={filters.trader} onChange={(event) => setFilters({ ...filters, trader: event.target.value })}><option>All</option>{[...new Set(items.map((item) => item.trader))].map((trader) => <option key={trader}>{trader}</option>)}</select>
@@ -335,7 +470,7 @@ function App() {
           <h2 className="section-title">Recent packs</h2>
           <div className="history-list">{state?.packs.map((pack) => <article className="history-row" key={pack.id}><div className="history-icon">{pack.wasGodPack ? "✦" : "◈"}</div><div className="history-main"><b>{state.pools.find((pool) => pool.poolKey === pack.poolKey)?.trader ?? pack.poolKey} Pack</b><small>{new Date(pack.timestamp).toLocaleString()}</small></div><div className="history-pulls">{pack.cards.map((card, index) => <span className={`rarity-text-${card.rarity.toLowerCase()}`} key={`${pack.id}-${index}`} title={`${card.rarity}: ${card.name}`}>{card.name}</span>)}</div><b className="history-result">{pack.wasGodPack ? "GOD PACK" : "OPENED"}</b></article>)}</div>
           <h2 className="section-title">Recent transactions</h2>
-          <div className="transaction-list">{state?.ledger.map((entry) => <article className="transaction-row" key={entry.id}><span>{entry.note ?? entry.type}</span><small>{new Date(entry.timestamp).toLocaleString()}</small><b className={entry.coinDelta >= 0 ? "positive" : ""}>{entry.coinDelta ? `${entry.coinDelta > 0 ? "+" : ""}${entry.coinDelta} coins` : `${entry.scrapDelta > 0 ? "+" : ""}${entry.scrapDelta} scrap`}</b>{["xp_entry", "pack_purchase"].includes(entry.type) && !state.ledger.some((candidate) => candidate.reversesId === entry.id) && <button className="text-button" onClick={() => void undo(entry)}>UNDO</button>}</article>)}</div>
+          <div className="transaction-list">{state?.ledger.map((entry) => <article className="transaction-row" key={entry.id}><span>{entry.note ?? entry.type}</span><small>{new Date(entry.timestamp).toLocaleString()}</small><b className={entry.coinDelta >= 0 ? "positive" : ""}>{entry.coinDelta ? `${entry.coinDelta > 0 ? "+" : ""}${entry.coinDelta} coins` : `${entry.scrapDelta > 0 ? "+" : ""}${entry.scrapDelta} scrap`}</b>{["xp_entry", "pack_purchase", "collectible_pack_purchase"].includes(entry.type) && !state.ledger.some((candidate) => candidate.reversesId === entry.id) && <button className="text-button" onClick={() => void undo(entry)}>UNDO</button>}</article>)}</div>
         </section>}
 
         {tab === "Settings" && state && <section>
@@ -385,25 +520,85 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   return <article className="stat-card"><span>{label}</span><b>{typeof value === "number" ? value.toLocaleString() : value}</b></article>;
 }
 
+function CollectibleFace({
+  card,
+  ownedCount = 0,
+  foilCount = 0,
+  isNew = false,
+  isFoil = false,
+  forceRevealed,
+}: {
+  card: CollectibleCard;
+  ownedCount?: number;
+  foilCount?: number;
+  isNew?: boolean;
+  isFoil?: boolean;
+  forceRevealed?: boolean;
+}) {
+  const revealed = forceRevealed ?? ownedCount > 0;
+  const image = revealed ? card.imageLocal ?? card.imageUrl : null;
+  return <article className={`collectible-face rarity-${card.rarity.toLowerCase()} ${revealed ? "" : "collectible-locked"} ${isFoil || foilCount > 0 ? "foil" : ""}`}>
+    <div className={`collectible-art collectible-art-${card.category.toLowerCase()}`}>
+      {image && <img src={image} alt={`${card.name} artwork`} loading="lazy" />}
+      {!image && <span>{revealed ? card.symbol : "?"}</span>}
+      <small className="collectible-art-category">{card.cardType.toUpperCase()}</small>
+      <span className="collectible-cost"><small>COST</small><b>{revealed ? card.cost : "—"}</b></span>
+      <div className="collectible-art-stats">
+        <span><b>{revealed ? card.attack : "—"}</b><small>ATK</small></span>
+        <span><b>{revealed ? card.resources : "—"}</b><small>RES</small></span>
+        <span><b>{revealed ? card.reputation : "—"}</b><small>REP</small></span>
+      </div>
+    </div>
+    <div className="collectible-card-heading">
+      <div><small>{card.cardType.toUpperCase()} · {card.category.toUpperCase()}</small><b>{revealed ? card.name : "Undiscovered card"}</b></div>
+      <span className={`rarity-text-${card.rarity.toLowerCase()}`}>{card.rarity.toUpperCase()}</span>
+    </div>
+    <div className="collectible-traits">{(revealed ? card.traits : ["Undiscovered"]).map((trait) => <span key={trait}>{trait}</span>)}</div>
+    <div className="collectible-spell">
+      <small>ABILITY · {revealed ? card.abilityName : "UNKNOWN"}</small>
+      <p>{revealed ? card.abilityText : "Discover this card to reveal its signature spell."}</p>
+    </div>
+    <p className="collectible-story">{revealed ? `“${card.story}”` : "The story is waiting to be found."}</p>
+    <div className="collectible-card-footer">
+      <span className="collectible-reward">REWARD <b>{revealed ? card.reward : "—"}</b></span>
+      <span className="collectible-health" title="Health">{revealed ? card.health : "—"}</span>
+      {revealed && <span>{ownedCount > 1 ? `×${ownedCount} OWNED` : ownedCount === 1 ? "IN COLLECTION" : "PACK PULL"}</span>}
+      {isNew && <em>NEW</em>}
+      {(isFoil || foilCount > 0) && <i>✦ FOIL {foilCount > 1 ? `×${foilCount}` : ""}</i>}
+    </div>
+  </article>;
+}
+
 function Setting({ label, value, min, max, step = 1, onSave }: { label: string; value: number; min: number; max: number; step?: number; onSave: (value: number) => void }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   return <label className="setting-line"><span>{label}</span><input type="number" value={draft} min={min} max={max} step={step} onChange={(event) => setDraft(event.target.value)} onBlur={() => { const parsed = Number(draft); if (Number.isFinite(parsed) && parsed >= min && parsed <= max && parsed !== value) onSave(parsed); else if (!Number.isFinite(parsed) || parsed < min || parsed > max) setDraft(String(value)); }} /></label>;
 }
 
-interface OverlayCard extends DrawnCard {
+interface OverlayItemCard extends DrawnCard {
   imageLocal?: string | null;
 }
 
-interface OverlayEvent {
+interface OverlayEventBase {
   poolKey: string;
-  cards: OverlayCard[];
   godPack: boolean;
   packId?: string;
   duration?: number;
   overlayMode?: "immediate" | "synced";
   isTest?: boolean;
 }
+
+interface ItemOverlayEvent extends OverlayEventBase {
+  cards: OverlayItemCard[];
+  isCollectible?: false;
+}
+
+interface CollectibleOverlayEvent extends OverlayEventBase {
+  cards: Array<CollectibleCard & DrawnCollectible>;
+  isCollectible: true;
+}
+
+type OverlayEvent = ItemOverlayEvent | CollectibleOverlayEvent;
 
 function Overlay() {
   const params = new URLSearchParams(window.location.search);
@@ -493,9 +688,29 @@ function Overlay() {
   if (!active && !hudEnabled) return <div className="overlay-canvas" aria-hidden="true" />;
   return <div className="overlay-canvas">
     {hudEnabled && <div className={`overlay-hud ${corner}`}><span>₡ {hud.coins.toLocaleString()}</span><span>◈ {hud.collected} / {hud.total}</span></div>}
-    {active && <div className={`overlay-pack ${active.godPack ? "god-pack" : ""}`}>
-      <div className="overlay-title">{active.godPack ? "✦ GOD PACK ✦" : active.isTest ? "TEST PACK" : "PACK OPENED"}</div>
-      <div className="overlay-cards">{active.cards.map((card, index) => <article key={`${active.packId ?? "test"}-${index}`} className={`overlay-card rarity-${card.rarity.toLowerCase()} ${shown.has(index) ? "show" : ""} ${card.isFoil ? "foil" : ""}`}><div className="overlay-card-inner"><div className="overlay-card-back">T</div><div className="overlay-card-front">{card.isNew && <small className="overlay-new">NEW</small>}<div className="overlay-card-art">{card.imageLocal ? <img src={card.imageLocal} alt="" /> : <span className="overlay-card-placeholder" aria-hidden="true">▧</span>}</div><span className="overlay-card-name">{card.name}</span><b>{card.rarity.toUpperCase()}</b>{card.isFoil && <i>FOIL ✦</i>}</div></div></article>)}</div>
+    {active && <div className={`overlay-pack ${active.godPack ? "god-pack" : ""} ${active.isCollectible ? "collectible-overlay-pack" : ""}`}>
+      <div className="overlay-title">{active.isCollectible ? "COLLECTIBLES · PACK OPENED" : active.godPack ? "✦ GOD PACK ✦" : active.isTest ? "TEST PACK" : "PACK OPENED"}</div>
+      <div className="overlay-cards">{active.isCollectible
+        ? active.cards.map((card, index) => <article key={`${active.packId ?? "test"}-${index}`} className={`overlay-card overlay-collectible-card rarity-${card.rarity.toLowerCase()} ${shown.has(index) ? "show" : ""} ${card.isFoil ? "foil" : ""}`}>
+          <div className="overlay-card-inner">
+            <div className="overlay-card-back">T</div>
+            <div className="overlay-card-front overlay-collectible-card-front">
+              <CollectibleFace card={card} forceRevealed isNew={card.isNew} isFoil={card.isFoil} />
+            </div>
+          </div>
+        </article>)
+        : active.cards.map((card, index) => <article key={`${active.packId ?? "test"}-${index}`} className={`overlay-card rarity-${card.rarity.toLowerCase()} ${shown.has(index) ? "show" : ""} ${card.isFoil ? "foil" : ""}`}>
+          <div className="overlay-card-inner">
+            <div className="overlay-card-back">T</div>
+            <div className="overlay-card-front">
+              {card.isNew && <small className="overlay-new">NEW</small>}
+              <div className="overlay-card-art">{card.imageLocal ? <img src={card.imageLocal} alt="" /> : <span className="overlay-card-placeholder" aria-hidden="true">▧</span>}</div>
+              <span className="overlay-card-name">{card.name}</span>
+              <b>{card.rarity.toUpperCase()}</b>
+              {card.isFoil && <i>FOIL ✦</i>}
+            </div>
+          </div>
+        </article>)}</div>
     </div>}
   </div>;
 }
