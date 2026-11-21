@@ -2,6 +2,11 @@ name: Windows portable app
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to attach the package to (optional)
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -25,8 +30,8 @@ jobs:
           path: release/TarkovTCG-Portable.zip
           if-no-files-found: error
       - name: Attach package to GitHub Release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.release_tag }}
         run: gh release upload "$env:RELEASE_TAG" release/TarkovTCG-Portable.zip --clobber
