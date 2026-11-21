@@ -24,6 +24,19 @@ npm run dev
 
 Open `http://localhost:5173`. The Express API uses port 3000 and the Vite dev server proxies API requests to it. The SQLite database is local and is not committed.
 
+## Windows portable version
+
+This option is for players who do not want to install Node.js or npm:
+
+1. Download `TarkovTCG-Portable.zip` from the repository's **Releases** page.
+2. In Windows, right-click the ZIP and select **Extract All**. Run the app from the extracted folder, not from inside the ZIP.
+3. Double-click `Start-Tarkov-TCG.cmd`. The app opens in your browser; if it does not, go to <http://127.0.0.1:3000>.
+4. Leave the command window open while playing. Close it to stop the app.
+
+No installation or administrator access is required. The portable package includes the app runtime and a preloaded trader catalog. An internet connection is needed to refresh Tarkov data and load remote item artwork. Your database and progress are saved separately in `%LOCALAPPDATA%\TarkovTCG`, so replacing or extracting a newer app package does not overwrite your progress.
+
+The package is built automatically when a GitHub Release is published. A manually triggered build is also available in GitHub Actions.
+
 To run the Playwright smoke test, install its browser once with `npx playwright install chromium`.
 
 The seeder uses tarkov.dev's public JSON endpoints for trader inventories and item data, plus the `_en` endpoint for English names. If the upstream API is unavailable, `npm run spike` and `npm run seed` fail with an explicit error rather than writing fabricated data. The spike report is written to `reports/m0-data-spike-<mode>.json` when the service responds.

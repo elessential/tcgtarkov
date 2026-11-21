@@ -520,12 +520,12 @@ app.post("/api/packs/open", async (request, response) => {
   if (!result.repeated) {
     const itemImages = await prisma.item.findMany({
       where: { gameMode, id: { in: result.cards.map((card) => card.id) } },
-      select: { id: true, imageLocal: true },
+      select: { id: true, imageLocal: true, imageUrl: true },
     });
-    const imageById = new Map(itemImages.map((item) => [item.id, item.imageLocal]));
+    const imageById = new Map(itemImages.map((item) => [item.id, { imageLocal: item.imageLocal, imageUrl: item.imageUrl }]));
     const event = {
       poolKey,
-      cards: result.cards.map((card) => ({ ...card, imageLocal: imageById.get(card.id) ?? null })),
+      cards: result.cards.map((card) => ({ ...card, ...(imageById.get(card.id) ?? { imageLocal: null, imageUrl: null }) })),
       godPack: result.pack.wasGodPack,
       packId: result.pack.id,
       overlayMode: settings.overlayMode,

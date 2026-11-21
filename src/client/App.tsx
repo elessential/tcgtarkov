@@ -391,7 +391,11 @@ function App() {
           {openPack && <div className="reveal-backdrop">
             <div className="reveal-panel" role="dialog" aria-modal="true" aria-labelledby="pack-reveal-title">
               <div className="reveal-heading"><div><p className="eyebrow">{openPack.wasGodPack ? "✦ GOD PACK ✦" : "PACK OPENED"}</p><h2 id="pack-reveal-title">Reveal your cards</h2></div><button className="secondary-button" autoFocus onClick={() => setOpenPack(null)}>CLOSE</button></div>
-              <div className="card-row">{openPack.cards.map((card, index) => <button key={`${openPack.id}-${index}`} aria-label={revealed.has(index) ? `${card.name}, ${card.rarity}` : "Reveal card"} className={`reveal-card rarity-${card.rarity.toLowerCase()} ${revealed.has(index) ? "revealed" : ""} ${card.isFoil ? "foil" : ""}`} onClick={() => void run(() => flipCard(index))}><span className="reveal-card-inner"><span className="card-back">T</span><span className="card-front"><span className="card-image">{items.find((item) => item.id === card.id)?.imageLocal ? <img src={items.find((item) => item.id === card.id)?.imageLocal ?? ""} alt="" /> : "▧"}</span><b>{card.name}</b><small>{card.rarity.toUpperCase()}</small>{card.isNew && <em>NEW</em>}{card.isFoil && <i>FOIL</i>}</span></span></button>)}</div>
+              <div className="card-row">{openPack.cards.map((card, index) => {
+                const item = items.find((entry) => entry.id === card.id);
+                const image = item?.imageLocal ?? item?.imageUrl;
+                return <button key={`${openPack.id}-${index}`} aria-label={revealed.has(index) ? `${card.name}, ${card.rarity}` : "Reveal card"} className={`reveal-card rarity-${card.rarity.toLowerCase()} ${revealed.has(index) ? "revealed" : ""} ${card.isFoil ? "foil" : ""}`} onClick={() => void run(() => flipCard(index))}><span className="reveal-card-inner"><span className="card-back">T</span><span className="card-front"><span className="card-image">{image ? <img src={image} alt="" /> : "▧"}</span><b>{card.name}</b><small>{card.rarity.toUpperCase()}</small>{card.isNew && <em>NEW</em>}{card.isFoil && <i>FOIL</i>}</span></span></button>;
+              })}</div>
               <button className="primary-button flip-button" disabled={revealed.size === openPack.cards.length || busy} onClick={() => void flipAll()}>FLIP ALL</button>
             </div>
           </div>}
@@ -456,7 +460,7 @@ function App() {
             <input placeholder="SEARCH CARDS..." value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
           </div>
           <div className="collection-grid">{filteredItems.map((item) => <article className={`collection-card ${item.ownedCount === 0 ? "locked" : ""} rarity-${item.rarity.toLowerCase()}`} key={item.id}>
-            <div className="collection-image">{item.ownedCount > 0 && item.imageLocal ? <img src={item.imageLocal} alt="" /> : <span>{item.ownedCount > 0 ? "▧" : "???"}</span>}</div>
+            <div className="collection-image">{item.ownedCount > 0 && (item.imageLocal || item.imageUrl) ? <img src={item.imageLocal ?? item.imageUrl ?? ""} alt="" /> : <span>{item.ownedCount > 0 ? "▧" : "???"}</span>}</div>
             <div className="collection-details"><small>{item.trader.toUpperCase()} · LL{item.loyaltyLevel}</small><b>{item.ownedCount > 0 ? item.name : "???"}</b><span>{item.ownedCount > 0 ? <>{item.ownedCount > 1 && <i>x{item.ownedCount}</i>}{item.foilCount > 0 && <i className="foil-badge">✦ {item.foilCount}</i>}<em>{item.rarity}</em></> : <em>{item.rarity}</em>}</span></div>
             <div className="card-actions">{item.wikiUrl && item.ownedCount > 0 && <a href={item.wikiUrl} target="_blank" rel="noreferrer" title="Open Tarkov wiki">↗</a>}{item.ownedCount === 0 && <button disabled={busy || (state?.scrap ?? 0) < ({ Common: 4, Uncommon: 8, Rare: 20, Epic: 60, Legendary: 160 }[item.rarity])} onClick={() => void craft(item.id)}>CRAFT</button>}</div>
           </article>)}</div>
@@ -577,6 +581,7 @@ function Setting({ label, value, min, max, step = 1, onSave }: { label: string; 
 
 interface OverlayItemCard extends DrawnCard {
   imageLocal?: string | null;
+  imageUrl?: string | null;
 }
 
 interface OverlayEventBase {
@@ -704,7 +709,7 @@ function Overlay() {
             <div className="overlay-card-back">T</div>
             <div className="overlay-card-front">
               {card.isNew && <small className="overlay-new">NEW</small>}
-              <div className="overlay-card-art">{card.imageLocal ? <img src={card.imageLocal} alt="" /> : <span className="overlay-card-placeholder" aria-hidden="true">▧</span>}</div>
+              <div className="overlay-card-art">{card.imageLocal || card.imageUrl ? <img src={card.imageLocal ?? card.imageUrl ?? ""} alt="" /> : <span className="overlay-card-placeholder" aria-hidden="true">▧</span>}</div>
               <span className="overlay-card-name">{card.name}</span>
               <b>{card.rarity.toUpperCase()}</b>
               {card.isFoil && <i>FOIL ✦</i>}

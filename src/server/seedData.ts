@@ -16,7 +16,9 @@ export async function seedGameMode(gameMode: "regular" | "pve") {
 
   for (const item of expectedItems) {
     const prior = await prisma.item.findUnique({ where: { id_gameMode: { id: item.id, gameMode } } });
-    const imageLocal = await cacheImage(gameMode, item.id, [item.image512pxLink, item.iconLink]);
+    const imageLocal = process.env.TARKOV_SKIP_IMAGE_CACHE === "true"
+      ? prior?.imageLocal ?? null
+      : await cacheImage(gameMode, item.id, [item.image512pxLink, item.iconLink]);
     if (imageLocal && imageLocal !== prior?.imageLocal) downloaded += 1;
     if (!imageLocal) imageFailures += 1;
     await prisma.item.upsert({

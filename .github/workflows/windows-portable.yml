@@ -1,0 +1,32 @@
+name: Windows portable app
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run package:windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TarkovTCG-Portable-Windows
+          path: release/TarkovTCG-Portable.zip
+          if-no-files-found: error
+      - name: Attach package to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$env:RELEASE_TAG" release/TarkovTCG-Portable.zip --clobber

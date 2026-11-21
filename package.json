@@ -8,6 +8,8 @@
     "dev:server": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
     "dev:client": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "package:windows": "npm run build && npm run build:server && node scripts/package-windows.mjs",
     "start": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
